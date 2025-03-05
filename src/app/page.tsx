@@ -19,13 +19,7 @@ export default function Home() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
-  const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(() => {
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(
-      now.getMonth() + 1
-    ).padStart(2, "0")}`;
-    return 0; // We'll update this after we have the sorted months
-  });
+  const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(0);
 
   const handleUrlImport = useCallback(
     async (urlToFetch?: string) => {
