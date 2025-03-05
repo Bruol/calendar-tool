@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface Event {
   summary: string;
@@ -16,14 +16,50 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dragActive, setDragActive] = useState(false);
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleCalendars, setGoogleCalendars] = useState<any[]>([]);
-  const [selectedCalendar, setSelectedCalendar] = useState("");
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(0);
+
+  const handleUrlImport = useCallback(
+    async (urlToFetch?: string) => {
+      const urlToUse = urlToFetch || url;
+      if (!urlToUse) {
+        setError("Please enter a calendar URL");
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch("/api/fetch-ics", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: urlToUse }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to fetch ICS file");
+        }
+
+        const { content } = await response.json();
+        const parsedEvents = parseICS(content);
+        setEvents(parsedEvents);
+      } catch (error) {
+        setError(
+          error instanceof Error ? error.message : "Failed to import calendar"
+        );
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [url]
+  );
 
   // Load saved URL from cookie on component mount
   useEffect(() => {
@@ -38,7 +74,7 @@ export default function Home() {
       // Automatically fetch the calendar data
       handleUrlImport(decodedUrl);
     }
-  }, []); // Empty dependency array means this runs once on mount
+  }, [handleUrlImport]);
 
   // Save URL to cookie whenever it changes
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -177,92 +213,6 @@ export default function Home() {
     }
   };
 
-  const handleUrlImport = async (urlToFetch?: string) => {
-    const urlToUse = urlToFetch || url;
-    if (!urlToUse) return;
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/fetch-ics", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url: urlToUse }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch ICS file");
-      }
-
-      const { content } = await response.json();
-      const parsedEvents = parseICS(content);
-      setEvents(parsedEvents);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Error fetching or parsing ICS file"
-      );
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    try {
-      const response = await fetch("/api/google-auth");
-      const { url } = await response.json();
-      window.location.href = url;
-    } catch (error) {
-      setError("Failed to start Google authentication");
-      console.error(error);
-    }
-  };
-
-  const handleGoogleImport = async () => {
-    if (!selectedCalendar) return;
-
-    setIsGoogleLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch(
-        `/api/google-events?calendarId=${encodeURIComponent(selectedCalendar)}`
-      );
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch Google Calendar events");
-      }
-
-      // Convert Google Calendar events to our format
-      const convertedEvents = data.items.map((event: any) => ({
-        summary: event.summary || "Untitled Event",
-        start: event.start.dateTime || event.start.date,
-        end: event.end.dateTime || event.end.date,
-        description: event.description || "",
-        location: event.location || "",
-      }));
-
-      setEvents(convertedEvents);
-      setShowGoogleModal(false);
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to import Google Calendar"
-      );
-      console.error(error);
-    } finally {
-      setIsGoogleLoading(false);
-    }
-  };
-
   // Set default date range to current month when modal opens
   useEffect(() => {
     if (showExportModal) {
@@ -333,19 +283,6 @@ export default function Home() {
                         className="hidden"
                       />
                     </label>
-                    {/* <button
-                      onClick={() => setShowGoogleModal(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-200 flex items-center gap-2"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z" />
-                      </svg>
-                      Import from Google
-                    </button> */}
                   </div>
                 </div>
               </div>
@@ -643,24 +580,13 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-6">
                     <button
                       onClick={() =>
-                        setCurrentMonthIndex((prev) => Math.max(0, prev - 1))
+                        setCurrentMonthIndex((prev: number) =>
+                          Math.max(0, prev - 1)
+                        )
                       }
                       disabled={currentMonthIndex === 0}
-                      className="flex items-center text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <svg
-                        className="w-5 h-5 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 19l-7-7 7-7"
-                        />
-                      </svg>
                       Previous Month
                     </button>
                     <div className="flex items-center space-x-6">
@@ -675,27 +601,14 @@ export default function Home() {
                     </div>
                     <button
                       onClick={() =>
-                        setCurrentMonthIndex((prev) =>
+                        setCurrentMonthIndex((prev: number) =>
                           Math.min(sortedMonths.length - 1, prev + 1)
                         )
                       }
                       disabled={currentMonthIndex === sortedMonths.length - 1}
-                      className="flex items-center text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next Month
-                      <svg
-                        className="w-5 h-5 ml-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
                     </button>
                   </div>
 
@@ -739,7 +652,6 @@ export default function Home() {
 
                         // Add days of the month
                         for (let day = 1; day <= totalDays; day++) {
-                          const currentDate = new Date(year, month, day);
                           const dayEvents = monthEvents.filter((event) => {
                             const eventDate = new Date(event.start);
                             return eventDate.getDate() === day;
@@ -890,94 +802,6 @@ export default function Home() {
                 </div>
               );
             })()}
-          </div>
-        )}
-
-        {/* Google Calendar Modal */}
-        {showGoogleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-md w-full p-6 relative z-[10000]">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Import from Google Calendar
-                </h3>
-                <button
-                  onClick={() => setShowGoogleModal(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-              <div className="space-y-4">
-                {googleCalendars.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600 mb-4">
-                      Connect your Google Calendar to import events
-                    </p>
-                    <button
-                      onClick={handleGoogleAuth}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center gap-2 mx-auto"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z" />
-                      </svg>
-                      Connect Google Calendar
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Select Calendar
-                      </label>
-                      <select
-                        value={selectedCalendar}
-                        onChange={(e) => setSelectedCalendar(e.target.value)}
-                        className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      >
-                        <option value="">Select a calendar...</option>
-                        {googleCalendars.map((calendar) => (
-                          <option key={calendar.id} value={calendar.id}>
-                            {calendar.summary}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex justify-end gap-3 mt-6">
-                      <button
-                        onClick={() => setShowGoogleModal(false)}
-                        className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors duration-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleGoogleImport}
-                        disabled={!selectedCalendar || isGoogleLoading}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
-                      >
-                        {isGoogleLoading ? "Importing..." : "Import"}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
           </div>
         )}
       </div>
