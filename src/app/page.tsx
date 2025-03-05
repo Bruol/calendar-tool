@@ -543,18 +543,8 @@ export default function Home() {
               // If no events, return early
               if (sortedMonths.length === 0) return null;
 
-              // Find the current month's index
-              const currentDate = new Date();
-              const currentMonthKey = `${currentDate.getFullYear()}-${String(
-                currentDate.getMonth() + 1
-              ).padStart(2, "0")}`;
-              const currentMonthIndex = sortedMonths.findIndex(
-                (month) => month === currentMonthKey
-              );
-
               // Get current month's events
-              const monthKey =
-                sortedMonths[currentMonthIndex >= 0 ? currentMonthIndex : 0];
+              const monthKey = sortedMonths[currentMonthIndex];
               const [year, month] = monthKey.split("-");
               const monthEvents = groupedEvents[monthKey];
               const monthName = new Date(
@@ -579,11 +569,11 @@ export default function Home() {
                   {/* Month Navigation */}
                   <div className="flex items-center justify-between mb-6">
                     <button
-                      onClick={() =>
-                        setCurrentMonthIndex((prev: number) =>
-                          Math.max(0, prev - 1)
-                        )
-                      }
+                      onClick={() => {
+                        setCurrentMonthIndex(
+                          Math.max(0, currentMonthIndex - 1)
+                        );
+                      }}
                       disabled={currentMonthIndex === 0}
                       className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -600,11 +590,14 @@ export default function Home() {
                       </div>
                     </div>
                     <button
-                      onClick={() =>
-                        setCurrentMonthIndex((prev: number) =>
-                          Math.min(sortedMonths.length - 1, prev + 1)
-                        )
-                      }
+                      onClick={() => {
+                        setCurrentMonthIndex(
+                          Math.min(
+                            sortedMonths.length - 1,
+                            currentMonthIndex + 1
+                          )
+                        );
+                      }}
                       disabled={currentMonthIndex === sortedMonths.length - 1}
                       className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -631,11 +624,18 @@ export default function Home() {
                     {/* Calendar Body */}
                     <div className="grid grid-cols-7">
                       {(() => {
-                        const year = parseInt(currentMonthKey.split("-")[0]);
-                        const month =
-                          parseInt(currentMonthKey.split("-")[1]) - 1;
-                        const firstDay = new Date(year, month, 1);
-                        const lastDay = new Date(year, month + 1, 0);
+                        const currentMonthKey = sortedMonths[currentMonthIndex];
+                        const [year, month] = currentMonthKey.split("-");
+                        const firstDay = new Date(
+                          parseInt(year),
+                          parseInt(month) - 1,
+                          1
+                        );
+                        const lastDay = new Date(
+                          parseInt(year),
+                          parseInt(month),
+                          0
+                        );
                         const startingDay = firstDay.getDay();
                         const totalDays = lastDay.getDate();
                         const days = [];
