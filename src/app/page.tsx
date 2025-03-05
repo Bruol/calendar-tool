@@ -19,7 +19,13 @@ export default function Home() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
-  const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(0);
+  const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(() => {
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}`;
+    return 0; // We'll update this after we have the sorted months
+  });
 
   const handleUrlImport = useCallback(
     async (urlToFetch?: string) => {
@@ -542,6 +548,20 @@ export default function Home() {
 
               // If no events, return early
               if (sortedMonths.length === 0) return null;
+
+              // Update currentMonthIndex to current month if it's the first render
+              if (currentMonthIndex === 0) {
+                const now = new Date();
+                const currentMonthKey = `${now.getFullYear()}-${String(
+                  now.getMonth() + 1
+                ).padStart(2, "0")}`;
+                const currentIndex = sortedMonths.findIndex(
+                  (month) => month === currentMonthKey
+                );
+                if (currentIndex !== -1) {
+                  setCurrentMonthIndex(currentIndex);
+                }
+              }
 
               // Get current month's events
               const monthKey = sortedMonths[currentMonthIndex];
