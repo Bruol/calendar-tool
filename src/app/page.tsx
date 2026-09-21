@@ -1,17 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-
-interface Event {
-  summary: string;
-  start: string;
-  end: string;
-  description?: string;
-  location?: string;
-}
+import { parseICS, type CalendarEvent } from "@/lib/ics";
 
 export default function Home() {
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -87,78 +80,6 @@ export default function Home() {
     document.cookie = `calendar_url=${encodeURIComponent(
       newUrl
     )}; expires=${date.toUTCString()}; path=/`;
-  };
-
-  const parseICS = (content: string): Event[] => {
-    const events: Event[] = [];
-    const eventRegex = /BEGIN:VEVENT([\s\S]*?)END:VEVENT/g;
-    const matches = content.matchAll(eventRegex);
-
-    for (const match of matches) {
-      const eventContent = match[1];
-      const event: Event = {
-        summary: "",
-        start: "",
-        end: "",
-      };
-
-      // Extract summary
-      const summaryMatch = eventContent.match(/SUMMARY:(.*)/);
-      if (summaryMatch) event.summary = summaryMatch[1];
-
-      // Extract start date
-      const startMatch = eventContent.match(/DTSTART(?:;VALUE=DATE)?:(.*)/);
-      if (startMatch) {
-        const dateStr = startMatch[1];
-        // Handle different date formats (YYYYMMDD or YYYYMMDDTHHmmssZ)
-        if (dateStr.length === 8) {
-          event.start = `${dateStr.slice(0, 4)}-${dateStr.slice(
-            4,
-            6
-          )}-${dateStr.slice(6, 8)}`;
-        } else {
-          event.start = `${dateStr.slice(0, 4)}-${dateStr.slice(
-            4,
-            6
-          )}-${dateStr.slice(6, 8)} ${dateStr.slice(9, 11)}:${dateStr.slice(
-            11,
-            13
-          )}`;
-        }
-      }
-
-      // Extract end date
-      const endMatch = eventContent.match(/DTEND(?:;VALUE=DATE)?:(.*)/);
-      if (endMatch) {
-        const dateStr = endMatch[1];
-        if (dateStr.length === 8) {
-          event.end = `${dateStr.slice(0, 4)}-${dateStr.slice(
-            4,
-            6
-          )}-${dateStr.slice(6, 8)}`;
-        } else {
-          event.end = `${dateStr.slice(0, 4)}-${dateStr.slice(
-            4,
-            6
-          )}-${dateStr.slice(6, 8)} ${dateStr.slice(9, 11)}:${dateStr.slice(
-            11,
-            13
-          )}`;
-        }
-      }
-
-      // Extract description
-      const descMatch = eventContent.match(/DESCRIPTION:(.*)/);
-      if (descMatch) event.description = descMatch[1];
-
-      // Extract location
-      const locMatch = eventContent.match(/LOCATION:(.*)/);
-      if (locMatch) event.location = locMatch[1];
-
-      events.push(event);
-    }
-
-    return events;
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -535,27 +456,13 @@ export default function Home() {
                 }
                 acc[monthKey].push(event);
                 return acc;
-              }, {} as Record<string, Event[]>);
+              }, {} as Record<string, CalendarEvent[]>);
 
               // Sort months chronologically
               const sortedMonths = Object.keys(groupedEvents).sort();
 
               // If no events, return early
               if (sortedMonths.length === 0) return null;
-
-              // Update currentMonthIndex to current month if it's the first render
-              if (currentMonthIndex === 0) {
-                const now = new Date();
-                const currentMonthKey = `${now.getFullYear()}-${String(
-                  now.getMonth() + 1
-                ).padStart(2, "0")}`;
-                const currentIndex = sortedMonths.findIndex(
-                  (month) => month === currentMonthKey
-                );
-                if (currentIndex !== -1) {
-                  setCurrentMonthIndex(currentIndex);
-                }
-              }
 
               // Get current month's events
               const monthKey = sortedMonths[currentMonthIndex];
