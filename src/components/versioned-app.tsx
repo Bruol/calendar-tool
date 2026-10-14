@@ -19,11 +19,12 @@ interface CalendarSource {
   name: string;
   url: string;
   color: string;
+  enabled?: boolean;
   events: SourcedEvent[];
   error?: string;
 }
 
-type CalendarSubscription = Pick<CalendarSource, "id" | "name" | "url" | "color">;
+type CalendarSubscription = Pick<CalendarSource, "id" | "name" | "url" | "color" | "enabled">;
 
 const hours = (event: CalendarEvent) => (new Date(event.end).getTime() - new Date(event.start).getTime()) / 3_600_000;
 const duration = (event: CalendarEvent) => `${Number.isInteger(hours(event)) ? hours(event).toFixed(0) : hours(event).toFixed(1)}h`;
@@ -56,7 +57,7 @@ async function fetchCalendar(subscription: CalendarSubscription): Promise<Calend
 }
 
 function saveSubscriptions(calendars: CalendarSource[]) {
-  const subscriptions: CalendarSubscription[] = calendars.map(({ id, name, url, color }) => ({ id, name, url, color }));
+  const subscriptions: CalendarSubscription[] = calendars.map(({ id, name, url, color, enabled }) => ({ id, name, url, color, enabled: enabled !== false }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(subscriptions));
 }
 
@@ -68,7 +69,14 @@ export default function VersionedApp() {
   const [error, setError] = useState("");
   const [monthIndex, setMonthIndex] = useState(0);
   const [selected, setSelected] = useState<SourcedEvent | null>(null);
-  const events = useMemo(() => calendars.flatMap((calendar) => calendar.events), [calendars]);
+  const [copyFeedback, setCopyFeedback] = useState<{ id: string; message: string } | null>(null);
+  const events = useMemo(() => calendars.filter((calendar) => calendar.enabled !== false).flatMap((calendar) => calendar.events), [calendars]);
+
+  useEffect(() => {
+    if (!copyFeedback) return;
+    const timer = setTimeout(() => setCopyFeedback(null), 3000);
+    return () => clearTimeout(timer);
+  }, [copyFeedback]);
 
   const grouped = useMemo(() => events.reduce((all, event) => {
     const date = new Date(event.start);
@@ -127,6 +135,7 @@ export default function VersionedApp() {
       name,
       url: calendarUrl,
       color: COLORS[calendars.length % COLORS.length],
+      enabled: true,
     };
     const source = await fetchCalendar(subscription);
     setCalendars((current) => {
@@ -143,6 +152,22 @@ export default function VersionedApp() {
       return next;
     });
     setSelected(null);
+  };
+  const toggleCalendar = (id: string) => {
+    setCalendars((current) => {
+      const next = current.map((calendar) => calendar.id === id ? { ...calendar, enabled: calendar.enabled === false } : calendar);
+      saveSubscriptions(next);
+      return next;
+    });
+    setSelected((current) => current?.calendarId === id ? null : current);
+  };
+  const copyCalendarUrl = async (calendar: CalendarSource) => {
+    try {
+      await navigator.clipboard.writeText(calendar.url);
+      setCopyFeedback({ id: calendar.id, message: `Copied ${calendar.name} URL.` });
+    } catch {
+      setCopyFeedback({ id: calendar.id, message: `Could not copy ${calendar.name} URL. Try again.` });
+    }
   };
   const exportCsv = () => {
     const rows = [["Calendar", "Summary", "Start", "End", "Hours", "Location"], ...events.map((event) => [event.calendarName, event.summary, event.start, event.end, duration(event), event.location || ""] )];
@@ -182,10 +207,25 @@ export default function VersionedApp() {
             <button disabled={!calendarName.trim() || !url.trim() || loading} onClick={() => void addCalendar()}>{loading ? "Refreshing…" : "Add calendar"}</button>
           </div>
           {error && <p className="verror">{error}</p>}
-          {calendars.length > 0 && <div className="vsource-list"><span>Calendar subscriptions</span>{calendars.map((calendar) => <div className={calendar.error ? "has-error" : ""} key={calendar.id}><i style={{ background: calendar.color }} /><b title={`${calendar.name} — ${calendar.url}`}>{calendar.name}</b><small title={calendar.error}>{calendar.error || `${calendar.events.length} events`}</small><button aria-label={`Remove ${calendar.name}`} onClick={() => removeCalendar(calendar.id)}>×</button></div>)}</div>}
+          {calendars.length > 0 && <div className="vsource-list">
+            <span>Calendar subscriptions</span>
+            {calendars.map((calendar) => <div className={calendar.error ? "has-error" : ""} key={calendar.id}>
+              <label className="vsource-toggle" title={`${calendar.name} — ${calendar.url}`}>
+                <input type="checkbox" checked={calendar.enabled !== false} onChange={() => toggleCalendar(calendar.id)} aria-label={`Show ${calendar.name}`} style={{ accentColor: calendar.color }} />
+                <i style={{ background: calendar.color }} />
+                <b>{calendar.name}</b>
+              </label>
+              <small title={calendar.error}>{calendar.error || `${calendar.events.length} events`}</small>
+              <button className="vsource-copy" aria-label={`Copy ${calendar.name} URL`} title="Copy calendar URL" onClick={() => void copyCalendarUrl(calendar)}>Copy URL</button>
+              <button className="vsource-remove" aria-label={`Remove ${calendar.name}`} onClick={() => removeCalendar(calendar.id)}>×</button>
+            </div>)}
+            <p className="vsource-feedback" role="status">{copyFeedback?.message}</p>
+          </div>}
         </section>
 
-        {!events.length ? (
+        {!events.length && calendars.length > 0 ? (
+          <section className="vempty"><div><b>No events to show</b><p>{calendars.every((calendar) => calendar.enabled === false) ? "Select a calendar above to show its events." : "The selected calendars have no available events. Check their subscription status above."}</p></div></section>
+        ) : !events.length ? (
           <section className="vempty"><div><span>1</span><b>Add subscriptions</b><p>Name each ICS URL so it stays identifiable.</p></div><div><span>2</span><b>Always current</b><p>Saved URLs are fetched again whenever the page loads.</p></div><div><span>3</span><b>Review & export</b><p>Combine fresh events and download the result.</p></div></section>
         ) : (
           <section className="vresults">
