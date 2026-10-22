@@ -34,3 +34,17 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Calendar recurrence
+
+The ICS importer expands recurrence rules, additional dates, excluded dates,
+and moved or cancelled instances. Embedded calendar timezones preserve local
+session times across daylight saving changes. Finite series are expanded through
+their end; open-ended series are expanded through the end of the second calendar
+year after the current year. Expansion is capped at 100,000 instances per series.
+
+Run the importer regression tests with Node.js 22.6 or newer:
+
+```sh
+npm test
+```
